@@ -20,7 +20,7 @@ services:
     mem_limit: 256m
     cpus: 0.5
   db:
-    image: postgres:17-bookworm # TODO verify and pin image digest before shared use.
+    image: postgres:18-bookworm # TODO verify and pin image digest before shared use.
     environment:
       POSTGRES_USER: ${DB_USER:?Set DB_USER in .env}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
