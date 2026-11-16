@@ -1,0 +1,105 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stockdesk
+  namespace: default
+  labels:
+    app: stockdesk
+spec:
+  # In-memory inventory cannot safely be shared across replicas.
+  replicas: 1
+  strategy:
+    type: Recreate
+  progressDeadlineSeconds: 180
+  selector:
+    matchLabels:
+      app: stockdesk
+  template:
+    metadata:
+      labels:
+        app: stockdesk
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: stockdesk
+          # Deliberately not deployable unchanged. CI renders the pushed digest.
+          image: registry.corvane.example/stockdesk:REPLACE_WITH_CI_COMMIT_SHA
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 3000
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: PORT
+              value: "3000"
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef: {name: stockdesk-env, key: DB_HOST}
+            - name: DB_PORT
+              valueFrom:
+                secretKeyRef: {name: stockdesk-env, key: DB_PORT}
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef: {name: stockdesk-env, key: DB_USER}
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: stockdesk-env, key: DB_PASSWORD}
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef: {name: stockdesk-env, key: API_KEY}
+          startupProbe:
+            httpGet: {path: /live, port: http}
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: {path: /live, port: http}
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: stockdesk
+  namespace: default
+spec:
+  type: ClusterIP
+  selector:
+    app: stockdesk
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
